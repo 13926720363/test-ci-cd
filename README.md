@@ -2,8 +2,10 @@
 
 一个最小可运行的博客站点，演示如何使用 **GitHub Actions** 完成：
 
-- **CI**：push / PR 时自动 `npm ci` → `npm run lint` → `npm run build`
+- **CI**：push / PR 时自动 `npm install` → `npm run lint` → `npm test` → `npm run build`
 - **CD**：push 到 `main` 后自动构建并部署到 **GitHub Pages**
+
+> 📘 完整的 CI/CD 流程、踩坑记录与扩展建议见 [`docs/ci-cd.md`](./docs/ci-cd.md)。
 
 ## 技术栈
 
@@ -71,7 +73,7 @@ npm run preview   # 本地预览生产构建
 `.github/workflows/ci.yml`：
 
 - 触发：push 或 PR 到 `main`
-- 步骤：checkout → setup-node@20（带 npm 缓存）→ `npm ci` → `npm run lint` → `npm run build`
+- 步骤：checkout → setup-node@20（带 npm 缓存）→ `npm install` → `npm run lint` → `npm test` → `npm run build`
 
 `.github/workflows/deploy.yml`：
 
@@ -81,7 +83,8 @@ npm run preview   # 本地预览生产构建
 
 ## 后续可拓展
 
-- 接入 [Vitest](https://vitest.dev/) + React Testing Library，并在 CI 中加入 `npm test`
+- ✅ ~~接入 [Vitest](https://vitest.dev/) + React Testing Library，并在 CI 中加入 `npm test`~~（已完成,见 `src/**/*.test.{js,jsx}`）
+- ✅ ~~给 main 分支加保护规则，要求 CI 通过后才能合并~~（已完成,详见 [`docs/ci-cd.md`](./docs/ci-cd.md) §6.1）
 - 用 MDX / 远程 CMS 替换 `src/data/posts.js`
 - 在 PR 中使用 `actions/upload-artifact` 暴露预览构建产物
-- 给 main 分支加保护规则，要求 CI 通过后才能合并
+- 强制覆盖率阈值或加 Playwright e2e 层（见 `docs/ci-cd.md` §6）
