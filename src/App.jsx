@@ -41,6 +41,8 @@ export default function App() {
         <div className="container">
           © {new Date().getFullYear()} My Mini Blog · Powered by Vite + React ·
           Deployed via GitHub Actions
+          <br />
+          <small>📘 CI/CD 流程见仓库 docs/ci-cd.md</small>
         </div>
       </footer>
     </div>
