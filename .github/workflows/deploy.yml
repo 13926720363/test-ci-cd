@@ -31,7 +31,9 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        # 见 ci.yml 的同名步骤注释:用 npm install 绕开 Windows 生成的
+        # lockfile 在 Linux 上 npm ci 触发 EBADPLATFORM 的问题。
+        run: npm install --no-audit --no-fund
 
       - name: Build
         # GitHub Pages 项目站点路径形如 https://<user>.github.io/<repo>/

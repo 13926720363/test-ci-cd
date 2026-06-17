@@ -22,7 +22,11 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        # 使用 npm install 而非 npm ci:
+        # 在 Windows 上由 npm 11 生成的 lockfile 会把 esbuild 的平台可选包
+        # (如 @esbuild/netbsd-arm64) 错标成必装,导致 Linux 上 npm ci 报 EBADPLATFORM。
+        # npm install 走 lockfile 但宽容跳过平台不匹配的可选包,功能等价、更稳。
+        run: npm install --no-audit --no-fund
 
       - name: Lint
         run: npm run lint
