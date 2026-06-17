@@ -29,8 +29,9 @@
 - **Deploy** 是发布管道：仅 `main` 分支 push 触发，构建并发布静态产物到
   GitHub Pages。
 
-两条 workflow 互相独立：CI 失败不会阻止 Deploy 排队；但 Deploy 内部也会跑 build，
-如果代码本身构不出来同样会失败，事实上对部署形成了二次防护。
+两条 workflow 在 GitHub Actions 层面互相独立、并行触发（同一次 push 同时收到两份）。
+**真正把"CI 没过 → 不能进 main → Deploy 也就不会发布坏代码"这条因果串起来的，是 main 分支的保护规则**（见 [§2.4](#24-分支保护)）。
+Deploy 内部也会跑一次 build，如果代码本身构不出来同样会失败，事实上对部署形成二次防护。
 
 ---
 
@@ -92,6 +93,55 @@ CI 不上传任何 artifact，只承担"门"的职责；产物会由 Deploy work
   Pro/Team/Enterprise，否则 `gh api -X POST .../pages` 会返回 422。
 - 当前仓库为 public。Pages 已通过 API 启用，模式为 `build_type: workflow`
   （即 Source = GitHub Actions）。
+
+### 2.4 分支保护
+
+`main` 分支已启用保护规则，确保 CI 真正起到"门"的作用。
+
+| 配置项 | 值 | 作用 |
+|---|---|---|
+| 必须走 PR 才能合入 | 是（`required_approving_review_count: 0`） | 不能再 `git push origin main`；但单人开发不被审批数卡住 |
+| 必过的状态检查 | `Lint & Build` | 即 `ci.yml` 里 `build` job 的 name；CI 任何步骤挂都不让 merge |
+| `strict` | `true` | PR 分支必须先 update 到最新 main 才能合入，避免"分别看时都绿、合起来挂" |
+| 禁止 force push | 是 | 防止历史被覆写 |
+| 禁止删除分支 | 是 | `main` 不能被删 |
+| 管理员可绕过 | 是（`enforce_admins: false`） | 紧急情况 owner 仍可直接 push，留逃生通道 |
+
+通过 GitHub API 一次性配置（也可在 Settings → Branches 手动点）：
+
+```bash
+$json = @'
+{
+  "required_status_checks": { "strict": true, "contexts": ["Lint & Build"] },
+  "enforce_admins": false,
+  "required_pull_request_reviews": { "required_approving_review_count": 0 },
+  "restrictions": null,
+  "allow_force_pushes": false,
+  "allow_deletions": false
+}
+'@
+$json | gh api -X PUT repos/<owner>/<repo>/branches/main/protection --input -
+```
+
+**配上之后日常协作流程**：
+
+```bash
+git checkout -b feat/xxx
+# 改代码
+git commit -am "..."
+git push -u origin feat/xxx
+
+gh pr create --fill --base main      # 开 PR
+gh pr checks --watch                 # 等 "Lint & Build" 转绿
+gh pr merge --squash --delete-branch  # 自己合入(零审批)
+```
+
+**关键点：状态检查的名字**。GitHub 这里需要的是 **job 名**（`ci.yml` 里 `jobs.build.name: Lint & Build`），不是 workflow 名（`name: CI`）。如果改了 job 名，分支保护规则要同步更新，否则会一直显示 "expected — Lint & Build"，PR 永远 merge 不了。可以用以下命令确认当前状态检查名：
+
+```bash
+gh api repos/<owner>/<repo>/commits/main/check-runs \
+  --jq '.check_runs[] | "\(.name)\t\(.conclusion)"'
+```
 
 ---
 
@@ -238,14 +288,13 @@ Your current plan does not support GitHub Pages for this repository.
 
 按收益从高到低排：
 
-### 6.1 给 `main` 加分支保护
+### 6.1 给 `main` 加分支保护 ✅ 已实施
 
-仓库 **Settings → Branches → Add rule**：
+> 详细配置与日常协作流程见 [§2.4 分支保护](#24-分支保护)。
 
-- 要求 PR 才能合入 `main`
-- 勾选 "Require status checks to pass" → 选 `CI` workflow
-
-这一步才让 CI **真正卡住**流程，否则 CI 失败也能 push。
+落地后通过一个验证 PR（[#1](https://github.com/13926720363/test-ci-cd/pull/1)，docs(readme): sync README）确认了：
+- PR 上看到必过检查 `Lint & Build`，过了之后 `mergeStateStatus` 才变成 `CLEAN` 才能合入。
+- Squash 合入 main 后，CI 与 Deploy 各自被 push 触发跑，互相独立但都进了 success。
 
 ### 6.2 强制覆盖率阈值
 
@@ -306,8 +355,14 @@ npm run build
 npm run test:watch        # 改文件自动重跑
 npm run test:coverage     # 跑完打开 coverage/index.html
 
-# Pages 部署链路相关
-git push                  # 推到 main 后自动触发 CI 与 Deploy
+# Pages 部署链路相关（main 已启用分支保护，不能再直接 push main）
+git checkout -b feat/xxx          # 任何改动先开分支
+git commit -am "..."
+git push -u origin feat/xxx
+gh pr create --fill --base main   # 开 PR
+gh pr checks --watch              # 等 "Lint & Build" 转绿
+gh pr merge --squash --delete-branch   # 合入(自己合自己,零审批),会触发 main 上的 Deploy
+
 gh run list               # 看最近的 workflow 状态
 gh run view <id> --log    # 看具体 run 日志
 gh run view <id> --log-failed   # 只看失败步骤
